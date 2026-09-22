@@ -110,72 +110,234 @@ never who can see what.
 
 ## Setup
 
-**Prerequisites:** Docker Desktop, Node 18+, and either
-[uv](https://docs.astral.sh/uv/) *or* Python 3.12 with pip.
+### Prerequisites
+
+| Requirement | Minimum | Verified on | Why |
+|---|---|---|---|
+| **Docker Desktop** | any current | 4.55.0 / Engine 29.1.3 | Runs Qdrant. **Must be running before step 1** |
+| **Docker Compose** | v2+ | v5.0.1 | Bundled with Docker Desktop |
+| **Node.js** | **≥ 20.9.0** | 24.14.0 | Next.js 16 requires it (`engines.node`). Node 18 **will not work** |
+| **npm** | ≥ 9 | 11.9.0 | — |
+| **uv** | any | 0.12.10 | Manages Python itself — see note below |
+| *or* **Python** | 3.12.x | 3.12.14 | Only if you prefer pip to uv |
+| **Groq API key** | — | — | Free at [console.groq.com/keys](https://console.groq.com/keys) |
+
+**No GPU required.** Everything runs on CPU: torch installs the CPU build, and
+the cross-encoder is pinned to `device="cpu"`.
+
+> **You don't need Python installed.** `uv sync` downloads and manages CPython
+> 3.12 on its own. If you don't have uv:
+> `curl -LsSf https://astral.sh/uv/install.sh | sh` (macOS/Linux) or
+> `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"` (Windows).
+
+**Disk space: budget ~3.5 GB.** Measured on this machine after a full install:
+
+| What | Size | Where |
+|---|---|---|
+| Python dependencies (torch dominates) | 1,239 MB | `backend/.venv/` |
+| Qdrant storage | 912 MB | `qdrant_storage/` |
+| Docling layout + TableFormer models | 669 MB | `~/.cache/docling/models/` |
+| Frontend packages | 417 MB | `frontend/node_modules/` |
+| Cross-encoder reranker | 88 MB | `~/.cache/huggingface/hub/` |
+| FastEmbed models (dense + BM25) | 64 MB | `%TEMP%/fastembed_cache/` ⚠️ |
+
+⚠️ FastEmbed caches into the system **temp** directory. Windows Disk Cleanup
+will delete it, and the models silently re-download on the next run. Harmless,
+just slow — set `FASTEMBED_CACHE_PATH` if you want it somewhere permanent.
+
+### Shell note
+
+Commands below are bash. On **Windows PowerShell** they work as written (`cp`
+and `cat` are aliases). On **cmd.exe**, replace `cp x y` with `copy x y`.
+
+---
+
+### 1. Clone and start Qdrant
+
+Make sure Docker Desktop is actually running first.
 
 ```bash
 git clone https://github.com/kaviarasuRC/medibot_assignment.git
 cd medibot_assignment
+docker compose up -d
 ```
 
-**1. Start Qdrant**
+**Verify** — the dashboard should load at http://localhost:6333/dashboard:
 
 ```bash
-docker compose up -d
-# dashboard: http://localhost:6333/dashboard
+docker compose ps          # medibot-qdrant should be "Up (healthy)"
+curl http://localhost:6333/    # {"title":"qdrant - vector search engine",...}
 ```
 
-**2. Install backend dependencies**
+*First run pulls the Qdrant image (~180 MB), a few seconds to a minute.*
+
+### 2. Install backend dependencies
 
 ```bash
 cd backend
-uv sync                     # uv installs Python 3.12 itself
-# or, without uv:
-#   python -m venv .venv && .venv/Scripts/activate   (Windows)
-#   python -m venv .venv && source .venv/bin/activate (macOS/Linux)
-#   pip install -r requirements.txt
+uv sync
 ```
 
-**3. Add your Groq API key**
+<details>
+<summary>Without uv (Python 3.12 + pip)</summary>
+
+```bash
+python -m venv .venv
+source .venv/bin/activate        # macOS/Linux
+.venv\Scripts\activate           # Windows
+pip install -r requirements.txt
+```
+</details>
+
+**Verify:**
+
+```bash
+uv run python -c "import torch, docling, qdrant_client; print('ok')"
+```
+
+*Takes 3–10 minutes on a cold cache — torch alone is ~200 MB.*
+
+### 3. Add your Groq API key
 
 ```bash
 cp .env.example .env
-# edit .env and set GROQ_API_KEY=gsk_...   (get one at https://console.groq.com/keys)
 ```
 
-**4. Pre-download the Docling models — do this before a demo, not during one**
+Edit `backend/.env` and replace the placeholder:
+
+```
+GROQ_API_KEY=gsk_your_actual_key_here
+```
+
+**Verify** (should print `True`):
 
 ```bash
-uv run docling-tools models download
+uv run python -c "import sys; sys.path.insert(0,'.'); from app.config import settings; print(settings.groq_configured)"
 ```
 
-Several hundred MB of layout and TableFormer models. Only the PDF pipeline needs
-them; Markdown is pure Python. Ingestion will download them on first run anyway,
-but it is much less stressful to do it ahead of time.
+`.env` is gitignored. The app refuses to start generation if the placeholder is
+still in place, rather than failing later with an opaque 401.
 
-**5. Build the index** (run once, takes a few minutes on CPU)
+### 4. Pre-download the Docling models
+
+Do this now, not during a demo.
+
+```bash
+uv run docling-tools models download layout tableformer
+```
+
+**Name the two models explicitly.** The bare `docling-tools models download`
+pulls a much larger predefined set (SmolVLM, GraniteDocling, EasyOCR and more)
+that this project never loads. `layout` and `tableformer` are the only two the
+PDF pipeline needs. Markdown parsing needs no models at all.
+
+**Verify:**
+
+```bash
+ls ~/.cache/docling/models          # docling-project--docling-layout-heron, --docling-models
+```
+
+<details>
+<summary>Why this step actually saves anything (it nearly didn't)</summary>
+
+`docling-tools models download` writes to `~/.cache/docling/models`, but a bare
+`DocumentConverter()` resolves models through the **HuggingFace hub cache**
+instead. Left alone, this step downloads ~670 MB that ingestion then ignores,
+re-fetching the same models into a second cache — ~1.2 GB of duplication for no
+benefit.
+
+So `ingest/parse.py` passes `artifacts_path` when that directory exists, and
+falls back to the normal download path when it doesn't. Skipping this step is
+still fine; it just moves the download into step 5.
+
+Setting `artifacts_path` is strict — it disables Docling's auto-download
+fallback entirely — so the converter also sets `do_ocr=False`. Every PDF here is
+digital text rather than a scan, so OCR only costs time. Add a scanned document
+later and you would need `do_ocr=True` plus
+`docling-tools models download rapidocr`.
+</details>
+
+### 5. Build the index
 
 ```bash
 uv run python -m ingest.ingest --recreate
 ```
 
-**6. Run the backend**
+**Verify** — expect exactly this:
+
+```
+INFO ingest: Done. 256 chunks written; collection now holds 256 points.
+```
+
+*Takes 5–10 minutes on CPU. The 11 PDFs run through layout detection and
+TableFormer one at a time; long pauses with no output are normal.*
+
+Optional sanity check on chunk quality and metadata integrity:
+
+```bash
+uv run python scripts/inspect_chunks.py
+```
+
+### 6. Run the backend
 
 ```bash
 uv run uvicorn app.main:app --reload
-# API docs: http://localhost:8000/docs
-# health:   http://localhost:8000/health
 ```
 
-**7. Run the frontend**
+**Verify** — in a second terminal:
 
 ```bash
-cd ../frontend
+curl http://localhost:8000/health
+# {"status":"ok","qdrant":"ok","groq":"configured",
+#  "collection":"medibot_documents","points_count":256,"model":"openai/gpt-oss-120b"}
+```
+
+If `status` is `degraded`, the response says which half is wrong. Interactive API
+docs are at http://localhost:8000/docs.
+
+*Startup warms the embedding and rerank models — allow ~30 seconds before the
+first request. Later requests take a few seconds.*
+
+### 7. Run the frontend
+
+In a third terminal:
+
+```bash
+cd frontend
 cp .env.local.example .env.local
 npm install
 npm run dev
-# http://localhost:3000
 ```
+
+Open **http://localhost:3000** and click any demo account.
+
+*`npm install` takes 1–3 minutes.*
+
+---
+
+### Stopping everything
+
+`Ctrl+C` the backend and frontend terminals, then:
+
+```bash
+docker compose down            # keeps the index
+docker compose down -v         # also deletes qdrant_storage; re-run step 5 after
+```
+
+### Setup troubleshooting
+
+| Symptom | Cause and fix |
+|---|---|
+| `docker compose up -d` → "cannot connect to the Docker daemon" | Docker Desktop isn't running. Start it and wait for the whale icon to settle |
+| `npm install` errors about engine/version | Node is below 20.9. `node --version`, then upgrade |
+| `uv: command not found` | Install uv (see above), or use the pip path in step 2 |
+| Ingestion stops at 0 chunks | Qdrant isn't reachable. `docker compose ps` |
+| Ingestion is silent for minutes | Normal — TableFormer on CPU. Watch `points_count` climb via `curl localhost:6333/collections/medibot_documents` |
+| `/health` → `"groq":"missing GROQ_API_KEY"` | `.env` still has the placeholder, or you edited `.env.example` by mistake |
+| `/health` → `"qdrant":"collection missing"` | Step 5 hasn't run |
+| Every answer is "you don't have access" | Index is empty — check `points_count` is 256 |
+| Frontend says "Cannot reach the MediBot API" | Backend isn't running, or `NEXT_PUBLIC_API_URL` in `frontend/.env.local` is wrong |
+| `UnicodeEncodeError` on Windows | Shouldn't happen (`app/console.py` handles it). If it does in your own script, set `PYTHONIOENCODING=utf-8` |
 
 ---
 
