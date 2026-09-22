@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6f7f9;
+  --foreground: #16191d;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* Light-only by design. A half-themed dark mode reads worse in a demo than a
+   consistent light one, and the RBAC refusal treatment relies on the amber
+   contrast being predictable. */
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+@keyframes medibot-pulse {
+  0%, 100% { opacity: 0.35; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-2px); }
+}
+
+.dot-1 { animation: medibot-pulse 1.1s ease-in-out infinite; }
+.dot-2 { animation: medibot-pulse 1.1s ease-in-out 0.15s infinite; }
+.dot-3 { animation: medibot-pulse 1.1s ease-in-out 0.3s infinite; }
