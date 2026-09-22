@@ -35,3 +35,11 @@ yarn-error.log*
 Thumbs.db
 .idea/
 .vscode/
+
+# --- Generated editor-tooling scaffolding ---
+# `next dev` writes assistant instruction files into frontend/ on every run
+# (see node_modules/next/dist/server/lib/generate-agent-files.js) and re-creates
+# them if deleted, so they have to be ignored rather than removed. The frontend
+# has no hand-written Markdown of its own - all project documentation lives in
+# README.md and docs/ at the repository root.
+frontend/*.md
