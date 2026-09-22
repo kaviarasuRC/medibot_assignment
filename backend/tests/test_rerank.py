@@ -78,3 +78,47 @@ def test_an_unrelated_query_scores_below_the_relevance_floor():
     candidates = [chunk(IRRELEVANT, 1)]
     (score, _), = rerank("amiodarone loading dose in cardiac arrest", candidates, top_k=1)
     assert score < settings.rerank_min_score
+
+
+def test_a_weakly_phrased_but_correct_match_stays_above_the_floor():
+    """Regression: the floor must not refuse answers the user is entitled to.
+
+    The first floor here was 0.05, chosen on the reasoning that a relevant
+    passage scores 0.5-0.99. That holds for well-phrased questions only. This
+    chunk is the correct answer and still scores ~0.006, because cross-encoder
+    scores are not calibrated across queries - so 0.05 refused it.
+
+    A false refusal is the dangerous direction: it looks exactly like RBAC
+    working correctly. See scripts/calibrate_floor.py.
+    """
+    from app.config import settings
+
+    maintenance = Chunk(
+        text=(
+            "- After each patient use: clean with 70% IPA. - Weekly: functional check "
+            "by the department. - 6-monthly: full preventive maintenance by biomedical "
+            "engineering. - Annually: performance verification and safety test."
+        ),
+        source_document="equipment_manual.pdf",
+        collection="equipment",
+        section_title="Maintenance schedule",
+        chunk_type="text",
+    )
+    (score, _), = rerank(
+        "What is the preventive maintenance schedule for the autoclave?",
+        [maintenance],
+        top_k=1,
+    )
+    assert score >= settings.rerank_min_score, (
+        f"correct answer scored {score:.6f}, below the floor "
+        f"{settings.rerank_min_score} - re-run scripts/calibrate_floor.py"
+    )
+
+
+def test_the_floor_sits_between_the_measured_bands():
+    """Lock the calibration recorded in docs/rerank_floor_calibration.md."""
+    from app.config import settings
+
+    highest_correct_refusal = 0.000323
+    lowest_correct_answer = 0.005906
+    assert highest_correct_refusal < settings.rerank_min_score < lowest_correct_answer

@@ -32,11 +32,25 @@ _ANALYTICAL = re.compile(
 
 # Entities that only exist in mediassist.db, never in a PDF. Drawn from the
 # actual schema (see data/DATA_NOTES.md), not guessed.
+#
+# Two words were deliberately REMOVED from this list after they produced real
+# false positives:
+#
+#   - `escalat\w*` matched "How many cannulation attempts before ESCALATING?",
+#     sending a nursing question to the analytics gate and refusing a nurse an
+#     answer she is entitled to. "Escalate" is ordinary clinical vocabulary
+#     (escalate to a senior nurse, escalation path) and is a status *value*,
+#     not an entity.
+#   - bare `maintenance` matched "the preventive MAINTENANCE schedule for the
+#     autoclave", which is answered by equipment_manual.pdf, not by a table.
+#
+# Both are still reachable for genuine analytics because every real analytical
+# question names `claims` or `tickets`: "how many claims were escalated",
+# "which category has the most open maintenance tickets".
 _SQL_ENTITIES = re.compile(
     r"\b(claims?|claimed|reimbursements?|cashless|insurers?|"
-    r"tickets?|maintenance|escalat\w*|"
-    r"approved amount|claimed amount|resolution time|"
-    r"maintenance_tickets|claims table)\b",
+    r"tickets?|maintenance[_ ]tickets?|"
+    r"approved amount|claimed amount|claims table)\b",
     re.IGNORECASE,
 )
 

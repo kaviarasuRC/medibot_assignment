@@ -1,6 +1,6 @@
 # Retrieval Comparison
 
-Generated 2026-09-22 06:32 UTC by `uv run python scripts/compare_retrieval.py`.
+Generated 2026-09-22 08:15 UTC by `uv run python scripts/compare_retrieval.py`.
 
 8 probe queries, each with one hand-labelled correct chunk verified to exist in the indexed corpus. The metric is **hit@3**: is the correct chunk in the top 3 a configuration returns?
 
@@ -12,7 +12,7 @@ Each probe runs as a role permitted to see its answer, so this measures retrieva
 |---|---|---|---|
 | dense only | **3/8** | 5.6 | `N95`, `SP3000`, `J44.1`, `ICD-10 code I21.4`, `what happens if I am unwell and cannot come to work` |
 | bm25 only | **6/8** | 2.5 | `the insurer refused to pay, what do we do now`, `what happens if I am unwell and cannot come to work` |
-| hybrid | **7/8** | 1.9 | `what happens if I am unwell and cannot come to work` |
+| hybrid | **7/8** | 1.8 | `what happens if I am unwell and cannot come to work` |
 | hybrid + rerank | **7/8** | 1.9 | `the insurer refused to pay, what do we do now` |
 
 ## Rank of the correct chunk, per probe
@@ -21,7 +21,7 @@ Each probe runs as a role permitted to see its answer, so this measures retrieva
 
 | Probe | What it probes | dense only | bm25 only | hybrid | hybrid + rerank |
 |---|---|---|---|---|---|
-| `N95` | Bare respirator designation, no semantic content | — | 1 | 2 | 1 |
+| `N95` | Bare respirator designation, no semantic content | — | 1 | 1 | 1 |
 | `SP3000` | Equipment model code as written on the asset label | 11 | 1 | 1 | 1 |
 | `J44.1` | Bare ICD-10 code - near-meaningless to a dense embedder | 4 | 1 | 2 | 2 |
 | `M17.0` | Second ICD-10 code, to show the first was not a fluke | 3 | 1 | 1 | 1 |
@@ -56,12 +56,12 @@ Each probe runs as a role permitted to see its answer, so this measures retrieva
 
 **hybrid**
 
-1. `treatment_protocols.pdf` — C. Community-Acquired Pneumonia  
-   ICD-10: J18.9…
-2. `infection_control.pdf` — 2. PPE Selection Guide ✅  
+1. `infection_control.pdf` — 2. PPE Selection Guide ✅  
    Routine patient contact, Gloves = Yes. Routine patient contact, Apron/Gown = No. Routine patient contact, Mask…
-3. `treatment_protocols.pdf` — D. Acute Myocardial Infarction - NSTEMI  
-   ICD-10: I21.4…
+2. `treatment_protocols.pdf` — C. Community-Acquired Pneumonia  
+   ICD-10: J18.9…
+3. `infection_control.pdf` — 4. Transmission-Based Precautions ✅  
+   Contact, Example Organisms = MRSA, VRE, C. difficile, norovirus. Contact, Key Measures = Single room preferred…
 
 **hybrid + rerank**
 
@@ -292,12 +292,12 @@ Each probe runs as a role permitted to see its answer, so this measures retrieva
 
 **hybrid**
 
-1. `equipment_manual.pdf` — High-alert drug protocols (drug library)  
-   The following carry hard limits (cannot be overridden) and soft limits (require confirmation): Dopamine, Dobut…
-2. `leave_policy.pdf` — 8. Leave Without Pay (LOP) & Special Cases  
+1. `leave_policy.pdf` — 8. Leave Without Pay (LOP) & Special Cases  
    - Leave Without Pay (LOP) is granted only when paid leave is exhausted and requires HOD plus HR approval; it d…
-3. `leave_policy.pdf` — Important  
-   Absence from duty without information for 10 or more consecutive days is treated as voluntary abandonment of s…
+2. `equipment_manual.pdf` — High-alert drug protocols (drug library)  
+   The following carry hard limits (cannot be overridden) and soft limits (require confirmation): Dopamine, Dobut…
+3. `claim_submission_guide.md` — Claim Submission & Escalation Guide > Purpose & Scope  
+   This guide is the standard operating reference for billing executives handling insurance claims at any MediAss…
 
 **hybrid + rerank**
 

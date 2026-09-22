@@ -44,6 +44,39 @@ def test_document_questions_route_to_hybrid(question: str):
     assert route(question) is RetrievalRoute.HYBRID_RAG, explain(question)
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        # Regression: `escalat\w*` used to be treated as a database entity, so
+        # this nursing question was refused at the SQL gate. "Escalate" is
+        # ordinary clinical vocabulary.
+        "How many cannulation attempts may one nurse make before escalating?",
+        "How many failed attempts before I escalate to a doctor?",
+        "What is the escalation procedure for a critical lab value?",
+        "How many hours before escalating a pressure injury?",
+        # Regression: bare `maintenance` matched the equipment manual, which is
+        # a document, not a table.
+        "How many preventive maintenance tasks are scheduled monthly?",
+        "What is the preventive maintenance schedule for the autoclave?",
+    ],
+)
+def test_clinical_and_equipment_vocabulary_does_not_route_to_sql(question: str):
+    assert route(question) is RetrievalRoute.HYBRID_RAG, explain(question)
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        # ...but genuine analytics still routes, because it names a table.
+        "How many claims were escalated in 2024?",
+        "Which equipment category has the most open maintenance tickets?",
+        "Which campus has the most escalated tickets?",
+    ],
+)
+def test_genuine_analytics_still_routes_to_sql(question: str):
+    assert route(question) is RetrievalRoute.SQL_RAG, explain(question)
+
+
 def test_both_cues_are_required():
     # Aggregation cue alone -> documents.
     assert route("how many steps are in the procedure?") is RetrievalRoute.HYBRID_RAG

@@ -60,14 +60,27 @@ class Settings(BaseSettings):
     max_tokens: int = Field(default=512, alias="MAX_TOKENS")
 
     # Relevance floor on the cross-encoder score. Below this, nothing the user
-    # may see is actually about the question, and we return the role-scoped
-    # refusal instead of letting the LLM improvise from loosely-related text.
+    # may see is actually about the question, so the role-scoped refusal is
+    # returned instead of letting the LLM improvise from loosely-related text.
     #
-    # Defensible because the sigmoid puts scores in (0, 1): a genuinely relevant
-    # passage lands in the 0.5-0.99 band, an unrelated one below 0.01. Without
-    # this floor a technician asking about amiodarone gets a confident answer
-    # assembled from whatever general-collection text scored least badly.
-    rerank_min_score: float = Field(default=0.05, alias="RERANK_MIN_SCORE")
+    # CALIBRATED, NOT GUESSED - see scripts/calibrate_floor.py and
+    # docs/rerank_floor_calibration.md. Re-run that script whenever the corpus,
+    # the embedder or the reranker changes.
+    #
+    # Measured over 18 labelled cases on this corpus:
+    #     highest score among should-REFUSE : 0.000323
+    #     lowest  score among should-ANSWER : 0.005906
+    # 0.002 is roughly the geometric midpoint, leaving ~6x margin above the
+    # highest correct refusal and ~3x below the lowest correct answer.
+    #
+    # The first guess here was 0.05, reasoning that a relevant passage "lands in
+    # the 0.5-0.99 band". That is true only for well-phrased questions. The
+    # model is bimodal but NOT calibrated across queries: a weakly phrased
+    # correct match ("what is the preventive maintenance schedule for the
+    # autoclave?") scored 0.0059 while its chunk still ranked FIRST. At 0.05
+    # that answer was refused - and a false refusal is the dangerous direction,
+    # because it looks exactly like RBAC working correctly.
+    rerank_min_score: float = Field(default=0.002, alias="RERANK_MIN_SCORE")
 
     # --- Dev flags ---
     log_rerank: bool = Field(default=False, alias="MEDIBOT_LOG_RERANK")

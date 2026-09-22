@@ -447,10 +447,47 @@ The **6th** hybrid result reranks to 1st and displaces hybrid's top hit. That is
 the assignment's tip made visible rather than asserted.
 
 Note the score distribution: three chunks above 0.85, everything else at
-~0.0000. The cross-encoder is sharply discriminative here, which is what makes
-the relevance floor (`RERANK_MIN_SCORE=0.05`) defensible rather than arbitrary —
-below it, MediBot returns the role-scoped refusal instead of improvising an
-answer from loosely related text.
+~0.0000. The cross-encoder is sharply bimodal here.
+
+### The relevance floor, and how it was calibrated
+
+Below `RERANK_MIN_SCORE`, MediBot returns the role-scoped refusal instead of
+improvising an answer from loosely related text. Getting that threshold right
+turned out to be subtler than it looks, and the failure is asymmetric:
+
+- **Too high** → correct answers are refused. This is the dangerous direction,
+  because a false refusal is visually **identical to RBAC working correctly**.
+- **Too low** → the LLM is handed irrelevant context and may improvise.
+
+The first value here was `0.05`, on the reasoning that "a relevant passage lands
+in the 0.5–0.99 band". That holds only for *well-phrased* questions. The model
+is bimodal but **not calibrated across queries** — a weakly phrased correct match
+scores an order of magnitude lower while still ranking **first**. At `0.05`, a
+nurse asking *"what is the escalation procedure if a cannula site looks
+infected?"* was refused an answer she is entitled to read (correct chunk, rank 1,
+score 0.0141).
+
+So the floor is measured rather than guessed:
+
+```bash
+cd backend && uv run python scripts/calibrate_floor.py
+```
+
+Full output: [`docs/rerank_floor_calibration.md`](docs/rerank_floor_calibration.md).
+18 labelled cases — 8 that must be refused, 10 that must be answered:
+
+| Metric | Value |
+|---|---|
+| Highest score among should-**refuse** | `0.000323` |
+| Lowest score among should-**answer** | `0.005906` |
+| Separable | **yes** |
+| Configured floor | **`0.002`** |
+| Margin above the highest correct refusal | 6.2× |
+| Margin below the lowest correct answer | 3.0× |
+| Misclassified | **0 / 18** |
+
+Two unit tests lock this in, so a future change can't silently drift the floor
+back into the answer band.
 
 <!-- SCREENSHOT: rerank_demo.py output -->
 
@@ -720,7 +757,15 @@ anyone without uv.
 **A relevance floor on the reranker.** Beyond the spec. Retrieval always returns
 *something*; the floor decides whether any of it is actually on topic. Without
 it, a technician asking about a drug dosage gets a confident answer assembled
-from whatever general-collection text scored least badly.
+from whatever general-collection text scored least badly. It is
+[calibrated against labelled cases](#the-relevance-floor-and-how-it-was-calibrated),
+not guessed — the first guessed value refused correct answers.
+
+**The router requires two independent cues**, and its entity list excludes two
+words that look like database entities but aren't. `escalate` is ordinary
+clinical vocabulary (*escalate to a senior nurse*, *escalation path*) and bare
+`maintenance` matches the equipment manual. Both produced real false refusals
+before they were removed; six regression tests cover them.
 
 ### Three library behaviours that fail silently — all verified here, not assumed
 

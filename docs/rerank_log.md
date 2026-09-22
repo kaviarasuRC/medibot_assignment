@@ -1,6 +1,6 @@
 # Cross-Encoder Reranking Log
 
-Generated 2026-09-22 06:37 UTC by `uv run python scripts/rerank_demo.py`.
+Generated 2026-09-22 08:14 UTC by `uv run python scripts/rerank_demo.py`.
 
 Hybrid retrieval scores the query and each chunk **independently** - the two
 embeddings are computed without knowledge of each other. A cross-encoder reads
@@ -12,7 +12,7 @@ Only the top 3 after reranking are passed to the LLM, and
 only if they clear the relevance floor. Rows in **bold** are the ones that
 actually reached the prompt.
 
-Scores are in (0, 1) because the model is loaded with an explicit sigmoid activation. The relevance floor is `0.05` - below it, the role-scoped refusal is returned instead of an answer.
+Scores are in (0, 1) because the model is loaded with an explicit sigmoid activation. The relevance floor is `0.002` - below it, the role-scoped refusal is returned instead of an answer.
 
 ## `What size cannula should I use for a baby under 5 kg?`
 
@@ -49,18 +49,18 @@ Largest promotion: **10 places**.
 
 | hybrid rank | rerank score | new rank | move | source | section |
 |---|---|---|---|---|---|
-| 6 | **0.9814** | **1** | +5 | `infection_control.pdf` | 10. Isolation Signage |
+| 5 | **0.9814** | **1** | +4 | `infection_control.pdf` | 10. Isolation Signage |
 | 1 | **0.9768** | **2** | -1 | `infection_control.pdf` | 2. PPE Selection Guide |
-| 4 | **0.8570** | **3** | +1 | `infection_control.pdf` | 4. Transmission-Based Precautions |
+| 3 | **0.8570** | **3** | - | `infection_control.pdf` | 4. Transmission-Based Precautions |
 | 16 | 0.0000 | 4 | +12 | `staff_handbook.pdf` | Text-based org chart |
-| 3 | 0.0000 | 5 | -2 | `staff_handbook.pdf` | 12. Emergency Codes |
+| 4 | 0.0000 | 5 | -1 | `staff_handbook.pdf` | 12. Emergency Codes |
 | 19 | 0.0000 | 6 | +13 | `staff_handbook.pdf` | 13. Key Contacts |
 | 8 | 0.0000 | 7 | +1 | `general_faqs.pdf` | Q11. Who do I contact for a clinical software issue during a shift? |
 | 18 | 0.0000 | 8 | +10 | `icu_nursing_procedures.pdf` | Alarm response |
 | 15 | 0.0000 | 9 | +6 | `leave_policy.pdf` | 9. Public Holiday List (illustrative) |
 | 17 | 0.0000 | 10 | +7 | `icu_nursing_procedures.pdf` | Procedure |
 | 12 | 0.0000 | 11 | +1 | `icu_nursing_procedures.pdf` | Staging quick reference |
-| 5 | 0.0000 | 12 | -7 | `icu_nursing_procedures.pdf` | Equipment checklist |
+| 6 | 0.0000 | 12 | -6 | `icu_nursing_procedures.pdf` | Equipment checklist |
 | 11 | 0.0000 | 13 | -2 | `leave_policy.pdf` | Important |
 | 14 | 0.0000 | 14 | - | `icu_nursing_procedures.pdf` | Cannula change |
 | 2 | 0.0000 | 15 | -13 | `icu_nursing_procedures.pdf` | Safety |
@@ -80,9 +80,9 @@ Largest promotion: **13 places**.
 |---|---|---|---|---|---|
 | 1 | **0.9985** | **1** | - | `claim_submission_guide.md` | Claim Submission & Escalation Guide > 4. Claim Rejection Response > 4.3 Deadlines |
 | 3 | **0.9971** | **2** | +1 | `claim_submission_guide.md` | Claim Submission & Escalation Guide > 4. Claim Rejection Response > 4.2 Counter-response template |
-| 5 | **0.9748** | **3** | +2 | `claim_submission_guide.md` | Claim Submission & Escalation Guide > 4. Claim Rejection Response |
+| 4 | **0.9748** | **3** | +1 | `claim_submission_guide.md` | Claim Submission & Escalation Guide > 4. Claim Rejection Response |
 | 10 | 0.9508 | 4 | +6 | `claim_submission_guide.md` | Claim Submission & Escalation Guide > 4. Claim Rejection Response > 4.1 Common rejection codes |
-| 4 | 0.9067 | 5 | -1 | `claim_submission_guide.md` | Claim Submission & Escalation Guide > 5. Escalation Matrix |
+| 5 | 0.9067 | 5 | - | `claim_submission_guide.md` | Claim Submission & Escalation Guide > 5. Escalation Matrix |
 | 8 | 0.8973 | 6 | +2 | `claim_submission_guide.md` | Claim Submission & Escalation Guide > Purpose & Scope |
 | 9 | 0.8516 | 7 | +2 | `claim_submission_guide.md` | Claim Submission & Escalation Guide > Quick Reference Card |
 | 6 | 0.6568 | 8 | -2 | `claim_submission_guide.md` | Claim Submission & Escalation Guide > 2. Reimbursement Claim Process > 2.2 Step-by-step |
@@ -107,9 +107,9 @@ Largest promotion: **6 places**.
 
 | hybrid rank | rerank score | new rank | move | source | section |
 |---|---|---|---|---|---|
-| 2 | **0.9981** | **1** | +1 | `equipment_manual.pdf` | Remove from service |
+| 1 | **0.9981** | **1** | - | `equipment_manual.pdf` | Remove from service |
 | 4 | **0.9856** | **2** | +2 | `equipment_manual.pdf` | Remove from service |
-| 1 | **0.9681** | **3** | -2 | `equipment_manual.pdf` | E. Maintenance & Fault-Code Summary |
+| 2 | **0.9681** | **3** | -1 | `equipment_manual.pdf` | E. Maintenance & Fault-Code Summary |
 | 3 | 0.8764 | 4 | -1 | `equipment_manual.pdf` | Fault codes |
 | 5 | 0.6554 | 5 | - | `equipment_manual.pdf` | Fault codes |
 | 6 | 0.5909 | 6 | - | `equipment_manual.pdf` | Fault codes |
@@ -122,9 +122,9 @@ Largest promotion: **6 places**.
 | 12 | 0.0000 | 13 | -1 | `staff_handbook.pdf` | 12. Emergency Codes |
 | 8 | 0.0000 | 14 | -6 | `equipment_manual.pdf` | I. Common Operator Errors & Troubleshooting |
 | 20 | 0.0000 | 15 | +5 | `equipment_manual.pdf` | Battery & preventive maintenance |
-| 14 | 0.0000 | 16 | -2 | `leave_policy.pdf` | 8. Leave Without Pay (LOP) & Special Cases |
+| 15 | 0.0000 | 16 | -1 | `leave_policy.pdf` | 8. Leave Without Pay (LOP) & Special Cases |
 | 19 | 0.0000 | 17 | +2 | `general_faqs.pdf` | Q7. How do I reset my password for MediAssist systems? |
-| 15 | 0.0000 | 18 | -3 | `code_of_conduct.pdf` | Gross misconduct |
+| 14 | 0.0000 | 18 | -4 | `code_of_conduct.pdf` | Gross misconduct |
 | 17 | 0.0000 | 19 | -2 | `general_faqs.pdf` | Q11. Who do I contact for a clinical software issue during a shift? |
 | 18 | 0.0000 | 20 | -2 | `staff_handbook.pdf` | 6. Staff ID & Access Cards |
 
@@ -152,8 +152,8 @@ Largest promotion: **5 places**.
 | 14 | 0.0005 | 14 | - | `code_of_conduct.pdf` | 6. Substance Abuse |
 | 12 | 0.0003 | 15 | -3 | `staff_handbook.pdf` | 6. Staff ID & Access Cards |
 | 19 | 0.0002 | 16 | +3 | `general_faqs.pdf` | Q17. Who approves leave for doctors in the ICU department? |
-| 17 | 0.0000 | 17 | - | `staff_handbook.pdf` | Text-based org chart |
-| 18 | 0.0000 | 18 | - | `leave_policy.pdf` | Leave & Attendance Policy |
+| 18 | 0.0000 | 17 | +1 | `staff_handbook.pdf` | Text-based org chart |
+| 17 | 0.0000 | 18 | -1 | `leave_policy.pdf` | Leave & Attendance Policy |
 | 16 | 0.0000 | 19 | -3 | `staff_handbook.pdf` | 2. Organisational Structure |
 | 13 | 0.0000 | 20 | -7 | `general_faqs.pdf` | Q18. How do I get an experience letter or employment certificate? |
 
