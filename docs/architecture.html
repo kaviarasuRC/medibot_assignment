@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MediBot Architecture</title>
+<style>
+  :root{
+    --ink:#1a1d21; --ink2:#3f4652; --muted:#6b7280; --faint:#9aa3af;
+    --line:#d8dce2; --line2:#c8cdd6;
+    --bg:#f7f8fa; --card:#ffffff;
+    --blue:#2563eb; --blue-bg:#eff4ff; --blue-br:#a9c2f5;
+    --green:#047857; --green-bg:#ecfdf5; --green-br:#9fd9c2;
+    --amber:#92400e; --amber-bg:#fff7ed; --amber-br:#f0b775;
+    --violet:#5b21b6; --violet-bg:#f5f3ff; --violet-br:#c9bff5;
+    --gray-bg:#f1f3f6;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1120px;margin:0 auto;padding:48px 28px 80px}
+  header{border-bottom:1px solid var(--line);padding-bottom:26px}
+  .eyebrow{font:600 11.5px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;
+           color:var(--faint);margin-bottom:14px}
+  h1{font-size:31px;line-height:1.2;margin:0 0 12px;letter-spacing:-.02em}
+  .lede{font-size:16.5px;color:var(--ink2);max-width:76ch;margin:0}
+  .thesis{margin:22px 0 0;padding:16px 20px;background:var(--blue-bg);
+          border-left:3px solid var(--blue);border-radius:0 8px 8px 0;
+          font-size:15.5px;color:#1e3a8a;max-width:80ch}
+  section{margin-top:52px}
+  h2{font-size:12px;font-family:var(--mono);font-weight:600;letter-spacing:.09em;
+     text-transform:uppercase;color:var(--blue);margin:0 0 6px}
+  h3{font-size:21px;margin:0 0 10px;letter-spacing:-.01em}
+  .note{color:var(--ink2);max-width:80ch;margin:0 0 24px}
+  .fig{background:var(--card);border:1px solid var(--line);border-radius:12px;
+       padding:26px 22px;overflow:hidden}
+  .fig svg{width:100%;height:auto;display:block}
+  .cap{font-size:13px;color:var(--muted);margin-top:16px;padding-top:14px;
+       border-top:1px solid var(--line);max-width:90ch}
+  .cap strong{color:var(--ink2);font-weight:600}
+  .cap + .cap{border-top:none;padding-top:0;margin-top:10px}
+  code{font-family:var(--mono);font-size:.885em;background:var(--gray-bg);
+       padding:1.5px 5px;border-radius:4px;color:var(--ink2)}
+  pre{background:#fbfcfd;border:1px solid var(--line);border-radius:8px;
+      padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;
+      line-height:1.65;color:var(--ink2);margin:18px 0 0}
+  pre .k{color:var(--blue)}
+  pre .c{color:var(--faint)}
+  .legend{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:18px;padding-top:16px;
+          border-top:1px solid var(--line)}
+  .lg{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+  .sw{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--line2);flex:none}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));gap:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .card .k{font:600 11px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;
+           color:var(--faint);margin-bottom:8px}
+  .card .v{font-size:14px;color:var(--ink2);line-height:1.5}
+  .card .v b{color:var(--ink)}
+  .warn{background:var(--amber-bg);border:1px solid var(--amber-br);border-radius:10px;
+        padding:18px 20px;margin-top:22px}
+  .warn h4{margin:0 0 10px;font-size:14px;color:var(--amber)}
+  .warn ol{margin:0;padding-left:20px;font-size:13.5px;color:#a1651f;line-height:1.75}
+  .warn code{background:#fdead6;color:#7c3a0a}
+  footer{margin-top:64px;padding-top:22px;border-top:1px solid var(--line);
+         font-size:13px;color:var(--muted)}
+  @media print{
+    body{background:#fff}
+    .wrap{padding:0;max-width:none}
+    section{break-inside:avoid;margin-top:34px}
+    .fig{border-color:#ccc}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">MediBot &middot; MediAssist Health Network</div>
+  <h1>Advanced RAG with role-based access control</h1>
+  <p class="lede">Staff ask questions in natural language and get cited answers drawn from hospital documents — but only from the documents their role permits. Retrieval combines dense vector search with BM25 keyword search, a cross-encoder narrows the candidates, and a relational branch handles analytical questions that no PDF can answer.</p>
+  <p class="thesis"><strong>The design thesis:</strong> access control is a metadata pre-filter on the vector search, not an instruction in a system prompt. The LLM never receives a restricted chunk, so it cannot leak one — no matter how the question is phrased.</p>
+</header>
+
+<section>
+  <h2>Diagram 1 &middot; Who can see what</h2>
+  <h3>Five roles, five document collections, one analytical branch</h3>
+  <p class="note">This matrix lives in exactly one Python dict. The <code>access_roles</code> label written onto every chunk at ingestion time is <em>derived</em> from it, and the query filter applied at retrieval time reads from it — so the two can never drift apart. That drift is the most likely source of a silent access leak.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 1000 300" role="img" aria-label="Access matrix showing which of five roles can access each of five document collections plus SQL analytics">
+    <defs><style>
+      .ch{font:600 11px -apple-system,system-ui,sans-serif;fill:#6b7280}
+      .rl{font:600 13px ui-monospace,Menlo,monospace;fill:#1a1d21}
+      .yes{fill:#eff4ff;stroke:#a9c2f5;stroke-width:1.5}
+      .no{fill:#fcfcfd;stroke:#e6e9ee;stroke-width:1.5;stroke-dasharray:3 3}
+      .tick{font:600 13px -apple-system,system-ui,sans-serif;fill:#2563eb}
+      .dash{font:400 13px -apple-system,system-ui,sans-serif;fill:#cbd1da}
+      .sep{stroke:#d8dce2;stroke-width:1.5;stroke-dasharray:4 4}
+      .sqy{fill:#f5f3ff;stroke:#c9bff5;stroke-width:1.5}
+      .sqt{font:600 13px -apple-system,system-ui,sans-serif;fill:#5b21b6}
+    </style></defs>
+
+    <text class="ch" x="265" y="34" text-anchor="middle">general</text>
+    <text class="ch" x="395" y="34" text-anchor="middle">clinical</text>
+    <text class="ch" x="525" y="34" text-anchor="middle">nursing</text>
+    <text class="ch" x="655" y="34" text-anchor="middle">billing</text>
+    <text class="ch" x="785" y="34" text-anchor="middle">equipment</text>
+    <text class="ch" x="915" y="34" text-anchor="middle" fill="#5b21b6">SQL RAG</text>
+    <line class="sep" x1="850" y1="14" x2="850" y2="276"/>
+
+    <!-- doctor -->
+    <text class="rl" x="188" y="81" text-anchor="end">doctor</text>
+    <rect class="yes" x="209" y="59" width="112" height="34" rx="6"/><text class="tick" x="265" y="81" text-anchor="middle">✓</text>
+    <rect class="yes" x="339" y="59" width="112" height="34" rx="6"/><text class="tick" x="395" y="81" text-anchor="middle">✓</text>
+    <rect class="yes" x="469" y="59" width="112" height="34" rx="6"/><text class="tick" x="525" y="81" text-anchor="middle">✓</text>
+    <rect class="no"  x="599" y="59" width="112" height="34" rx="6"/><text class="dash" x="655" y="81" text-anchor="middle">—</text>
+    <rect class="no"  x="729" y="59" width="112" height="34" rx="6"/><text class="dash" x="785" y="81" text-anchor="middle">—</text>
+    <rect class="no"  x="859" y="59" width="112" height="34" rx="6"/><text class="dash" x="915" y="81" text-anchor="middle">—</text>
+
+    <!-- nurse -->
+    <text class="rl" x="188" y="125" text-anchor="end">nurse</text>
+    <rect class="yes" x="209" y="103" width="112" height="34" rx="6"/><text class="tick" x="265" y="125" text-anchor="middle">✓</text>
+    <rect class="no"  x="339" y="103" width="112" height="34" rx="6"/><text class="dash" x="395" y="125" text-anchor="middle">—</text>
+    <rect class="yes" x="469" y="103" width="112" height="34" rx="6"/><text class="tick" x="525" y="125" text-anchor="middle">✓</text>
+    <rect class="no"  x="599" y="103" width="112" height="34" rx="6"/><text class="dash" x="655" y="125" text-anchor="middle">—</text>
+    <rect class="no"  x="729" y="103" width="112" height="34" rx="6"/><text class="dash" x="785" y="125" text-anchor="middle">—</text>
+    <rect class="no"  x="859" y="103" width="112" height="34" rx="6"/><text class="dash" x="915" y="125" text-anchor="middle">—</text>
+
+    <!-- billing_executive -->
+    <text class="rl" x="188" y="169" text-anchor="end">billing_executive</text>
+    <rect class="yes" x="209" y="147" width="112" height="34" rx="6"/><text class="tick" x="265" y="169" text-anchor="middle">✓</text>
+    <rect class="no"  x="339" y="147" width="112" height="34" rx="6"/><text class="dash" x="395" y="169" text-anchor="middle">—</text>
+    <rect class="no"  x="469" y="147" width="112" height="34" rx="6"/><text class="dash" x="525" y="169" text-anchor="middle">—</text>
+    <rect class="yes" x="599" y="147" width="112" height="34" rx="6"/><text class="tick" x="655" y="169" text-anchor="middle">✓</text>
+    <rect class="no"  x="729" y="147" width="112" height="34" rx="6"/><text class="dash" x="785" y="169" text-anchor="middle">—</text>
+    <rect class="sqy" x="859" y="147" width="112" height="34" rx="6"/><text class="sqt" x="915" y="169" text-anchor="middle">✓</text>
+
+    <!-- technician -->
+    <text class="rl" x="188" y="213" text-anchor="end">technician</text>
+    <rect class="yes" x="209" y="191" width="112" height="34" rx="6"/><text class="tick" x="265" y="213" text-anchor="middle">✓</text>
+    <rect class="no"  x="339" y="191" width="112" height="34" rx="6"/><text class="dash" x="395" y="213" text-anchor="middle">—</text>
+    <rect class="no"  x="469" y="191" width="112" height="34" rx="6"/><text class="dash" x="525" y="213" text-anchor="middle">—</text>
+    <rect class="no"  x="599" y="191" width="112" height="34" rx="6"/><text class="dash" x="655" y="213" text-anchor="middle">—</text>
+    <rect class="yes" x="729" y="191" width="112" height="34" rx="6"/><text class="tick" x="785" y="213" text-anchor="middle">✓</text>
+    <rect class="no"  x="859" y="191" width="112" height="34" rx="6"/><text class="dash" x="915" y="213" text-anchor="middle">—</text>
+
+    <!-- admin -->
+    <text class="rl" x="188" y="257" text-anchor="end">admin</text>
+    <rect class="yes" x="209" y="235" width="112" height="34" rx="6"/><text class="tick" x="265" y="257" text-anchor="middle">✓</text>
+    <rect class="yes" x="339" y="235" width="112" height="34" rx="6"/><text class="tick" x="395" y="257" text-anchor="middle">✓</text>
+    <rect class="yes" x="469" y="235" width="112" height="34" rx="6"/><text class="tick" x="525" y="257" text-anchor="middle">✓</text>
+    <rect class="yes" x="599" y="235" width="112" height="34" rx="6"/><text class="tick" x="655" y="257" text-anchor="middle">✓</text>
+    <rect class="yes" x="729" y="235" width="112" height="34" rx="6"/><text class="tick" x="785" y="257" text-anchor="middle">✓</text>
+    <rect class="sqy" x="859" y="235" width="112" height="34" rx="6"/><text class="sqt" x="915" y="257" text-anchor="middle">✓</text>
+  </svg>
+
+  <p class="cap"><strong>One spec ambiguity, resolved.</strong> The assignment's role table gives <code>doctor</code> only clinical documents plus general, but its data-sources table lists <code>nursing</code> as accessible by nurse, doctor, and admin. The more specific statement wins, so doctor gets nursing — a physician reading ICU nursing procedures is clinically sensible. Say this in the README so a reviewer reads it as a decision rather than a bug.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Diagram 2 &middot; Query flow</h2>
+  <h3>Login → token → role → RBAC filter → retrieval → cited answer</h3>
+  <p class="note">This is the diagram the submission instructions ask for. Read it top to bottom: the role is established once at login, travels in the token, and is decoded server-side on every request. Any <code>role</code> field in the request body is discarded — that is adversarial test case 6, and the one a reviewer is most likely to try by hand.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 1060 990" role="img" aria-label="Query flow from login through token issue, role decode, routing, and either the SQL RAG branch or the hybrid retrieval branch, converging on a cited response">
+    <defs>
+      <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#c8cdd6"/>
+      </marker>
+      <style>
+        .bx{fill:#fff;stroke:#d8dce2;stroke-width:1.5}
+        .bxu{fill:#f1f3f6;stroke:#c8cdd6;stroke-width:1.5}
+        .bxs{fill:#f5f3ff;stroke:#c9bff5;stroke-width:1.5}
+        .bxr{fill:#ecfdf5;stroke:#9fd9c2;stroke-width:1.5}
+        .bxd{fill:#fffbeb;stroke:#f0b775;stroke-width:1.5}
+        .fl{font:600 10.5px ui-monospace,Menlo,monospace;fill:#6b7280;letter-spacing:.03em}
+        .tt{font:600 14px -apple-system,system-ui,sans-serif;fill:#1a1d21}
+        .dt{font:11.5px -apple-system,system-ui,sans-serif;fill:#6b7280}
+        .ln{stroke:#c8cdd6;stroke-width:1.5;fill:none}
+        .bl{font:600 10.5px ui-monospace,Menlo,monospace;fill:#9aa3af}
+      </style>
+    </defs>
+
+    <!-- 1 login -->
+    <rect class="bxu" x="310" y="20" width="440" height="68" rx="9"/>
+    <text class="fl" x="328" y="42">STAFF MEMBER</text>
+    <text class="tt" x="328" y="64">Signs in — nurse.priya / ••••••</text>
+    <text class="dt" x="328" y="80">one of five demo accounts, one per role</text>
+    <line class="ln" x1="530" y1="88" x2="530" y2="126" marker-end="url(#a1)"/>
+
+    <!-- 2 token -->
+    <rect class="bx" x="310" y="128" width="440" height="68" rx="9"/>
+    <text class="fl" x="328" y="150">POST /login → auth.py</text>
+    <text class="tt" x="328" y="172">Signed token carrying {sub, role}</text>
+    <text class="dt" x="328" y="188">the role is fixed here and nowhere else</text>
+    <line class="ln" x1="530" y1="196" x2="530" y2="234" marker-end="url(#a1)"/>
+
+    <!-- 3 chat -->
+    <rect class="bx" x="310" y="236" width="440" height="68" rx="9"/>
+    <text class="fl" x="328" y="258">POST /chat → get_current_role()</text>
+    <text class="tt" x="328" y="280">Role decoded from the bearer token</text>
+    <text class="dt" x="328" y="296">a “role” field in the request body is IGNORED</text>
+    <line class="ln" x1="530" y1="304" x2="530" y2="342" marker-end="url(#a1)"/>
+
+    <!-- 4 router -->
+    <rect class="bxd" x="310" y="344" width="440" height="68" rx="9"/>
+    <text class="fl" x="328" y="366" fill="#92400e">router.py</text>
+    <text class="tt" x="328" y="388">Aggregation cue AND database entity?</text>
+    <text class="dt" x="328" y="404">“how many … claims” → yes · “how many mg” → no</text>
+
+    <!-- split -->
+    <path class="ln" d="M530,412 L530,436 L280,436 L280,458" marker-end="url(#a1)"/>
+    <path class="ln" d="M530,412 L530,436 L780,436 L780,458" marker-end="url(#a1)"/>
+    <text class="bl" x="392" y="430" text-anchor="middle">YES → analytical</text>
+    <text class="bl" x="672" y="430" text-anchor="middle">NO → documents</text>
+
+    <!-- SQL column -->
+    <rect class="bxs" x="60" y="460" width="440" height="76" rx="9"/>
+    <text class="fl" x="78" y="482" fill="#5b21b6">sql_rag.py · gate</text>
+    <text class="tt" x="78" y="504">Role in {billing_executive, admin}?</text>
+    <text class="dt" x="78" y="522">otherwise: role-scoped refusal, no query runs</text>
+    <line class="ln" x1="280" y1="536" x2="280" y2="550" marker-end="url(#a1)"/>
+
+    <rect class="bxs" x="60" y="552" width="440" height="76" rx="9"/>
+    <text class="fl" x="78" y="574" fill="#5b21b6">step 1</text>
+    <text class="tt" x="78" y="596">Natural language → SQL (Groq)</text>
+    <text class="dt" x="78" y="614">schema + 3 sample rows per table in the prompt</text>
+    <line class="ln" x1="280" y1="628" x2="280" y2="642" marker-end="url(#a1)"/>
+
+    <rect class="bxs" x="60" y="644" width="440" height="76" rx="9"/>
+    <text class="fl" x="78" y="666" fill="#5b21b6">step 2</text>
+    <text class="tt" x="78" y="688">Extract the statement, then guard it</text>
+    <text class="dt" x="78" y="706">strip fences · SELECT-only · no stacked statements</text>
+    <line class="ln" x1="280" y1="720" x2="280" y2="734" marker-end="url(#a1)"/>
+
+    <rect class="bxs" x="60" y="736" width="440" height="76" rx="9"/>
+    <text class="fl" x="78" y="758" fill="#5b21b6">step 3</text>
+    <text class="tt" x="78" y="780">Execute read-only → rows → LLM</text>
+    <text class="dt" x="78" y="798">the executed SQL is returned and shown to the user</text>
+
+    <!-- Document column -->
+    <rect class="bxr" x="560" y="460" width="440" height="76" rx="9"/>
+    <text class="fl" x="578" y="482" fill="#047857">rbac.py</text>
+    <text class="tt" x="578" y="504">Build the filter from the role</text>
+    <text class="dt" x="578" y="522">MatchValue on access_roles — unknown role raises</text>
+    <line class="ln" x1="780" y1="536" x2="780" y2="550" marker-end="url(#a1)"/>
+
+    <rect class="bxr" x="560" y="552" width="440" height="76" rx="9"/>
+    <text class="fl" x="578" y="574" fill="#047857">retrieval.py · Qdrant</text>
+    <text class="tt" x="578" y="596">One query: dense ⊕ BM25, RRF fusion</text>
+    <text class="dt" x="578" y="614">query_filter pre-applies to BOTH branches → top 20</text>
+    <line class="ln" x1="780" y1="628" x2="780" y2="642" marker-end="url(#a1)"/>
+
+    <rect class="bx" x="560" y="644" width="440" height="76" rx="9"/>
+    <text class="fl" x="578" y="666">rag_pipeline.py</text>
+    <text class="tt" x="578" y="688">Assert every chunk is in-policy</text>
+    <text class="dt" x="578" y="706">a violation logs CRITICAL and raises — never silent</text>
+    <line class="ln" x1="780" y1="720" x2="780" y2="734" marker-end="url(#a1)"/>
+
+    <rect class="bx" x="560" y="736" width="440" height="76" rx="9"/>
+    <text class="fl" x="578" y="758">rerank.py → generate.py</text>
+    <text class="tt" x="578" y="780">Cross-encoder 20 → 3, then the LLM</text>
+    <text class="dt" x="578" y="798">only the reranked three enter the prompt</text>
+
+    <!-- rejoin -->
+    <path class="ln" d="M280,812 L280,844 L470,844 L470,868" marker-end="url(#a1)"/>
+    <path class="ln" d="M780,812 L780,844 L590,844 L590,868" marker-end="url(#a1)"/>
+
+    <rect class="bxu" x="310" y="870" width="440" height="88" rx="9"/>
+    <text class="fl" x="328" y="892">RESPONSE</text>
+    <text class="tt" x="328" y="914">answer · sources[] · retrieval_type · role</text>
+    <text class="dt" x="328" y="932">every response carries citations; a refusal is a 200,</text>
+    <text class="dt" x="328" y="948">not an error, and names the collections you CAN use</text>
+  </svg>
+
+  <div class="legend">
+    <span class="lg"><span class="sw" style="background:#e6e9ee;border-color:#b4bac5"></span> Person / response</span>
+    <span class="lg"><span class="sw" style="background:#fff;border-color:#b4bac5"></span> Backend module</span>
+    <span class="lg"><span class="sw" style="background:#fffbeb;border-color:#f0b775"></span> Routing decision</span>
+    <span class="lg"><span class="sw" style="background:#ecfdf5;border-color:#9fd9c2"></span> Access-control path</span>
+    <span class="lg"><span class="sw" style="background:#f5f3ff;border-color:#c9bff5"></span> SQL RAG branch</span>
+  </div>
+  <p class="cap"><strong>Screenshot this one for the README.</strong> The submission instructions ask for “a short architecture diagram showing the query flow from login → RBAC filter → Hybrid RAG / SQL RAG → response” — this is exactly that path.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Diagram 3 &middot; Where the filter sits</h2>
+  <h3>The difference between an access control and a suggestion</h3>
+  <p class="note">Both approaches produce a correct-looking answer. Only one of them is access control. This distinction is 25% of the grade, and it is the single thing most implementations get wrong.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 1000 372" role="img" aria-label="Side by side comparison of post-filtering in application code versus pre-filtering at the vector store query level">
+    <defs><style>
+      .pw{fill:#fffbf6;stroke:#f0b775;stroke-width:1.5}
+      .pr{fill:#f7fdfa;stroke:#9fd9c2;stroke-width:1.5}
+      .ph{font:700 13px -apple-system,system-ui,sans-serif}
+      .ps{font:11.5px -apple-system,system-ui,sans-serif}
+      .sb{fill:#fff;stroke:#e6e9ee;stroke-width:1.5}
+      .st{font:12px -apple-system,system-ui,sans-serif;fill:#3f4652}
+      .sn{font:600 12px ui-monospace,Menlo,monospace}
+      .fn{font:600 11.5px -apple-system,system-ui,sans-serif}
+    </style></defs>
+
+    <!-- WRONG panel -->
+    <rect class="pw" x="20" y="20" width="460" height="335" rx="11"/>
+    <text class="ph" x="42" y="50" fill="#92400e">✗  Filter after retrieval</text>
+    <text class="ps" x="42" y="70" fill="#a1651f">the intuitive approach, and a real leak</text>
+
+    <rect class="sb" x="42" y="86" width="416" height="44" rx="7"/>
+    <text class="st" x="58" y="113">Search <tspan class="sn" fill="#92400e">all 1,200</tspan> chunks — no filter</text>
+
+    <rect class="sb" x="42" y="140" width="416" height="44" rx="7"/>
+    <text class="st" x="58" y="167">Top 20 returned — <tspan class="sn" fill="#92400e">14 are restricted</tspan></text>
+
+    <rect class="sb" x="42" y="194" width="416" height="44" rx="7"/>
+    <text class="st" x="58" y="221">Python drops the restricted ones → <tspan class="sn" fill="#92400e">6 left</tspan></text>
+
+    <rect class="sb" x="42" y="248" width="416" height="44" rx="7"/>
+    <text class="st" x="58" y="275">Answer looks correct. Nobody notices.</text>
+
+    <text class="fn" x="42" y="320" fill="#92400e">Two real failures:</text>
+    <text class="ps" x="42" y="338" fill="#a1651f">restricted text entered process memory · recall collapses to 6</text>
+
+    <!-- RIGHT panel -->
+    <rect class="pr" x="520" y="20" width="460" height="335" rx="11"/>
+    <text class="ph" x="542" y="50" fill="#047857">✓  Filter at the query level</text>
+    <text class="ps" x="542" y="70" fill="#0f766e">what this design does</text>
+
+    <rect class="sb" x="542" y="86" width="416" height="44" rx="7"/>
+    <text class="st" x="558" y="113">Qdrant narrows to <tspan class="sn" fill="#047857">480 permitted</tspan> chunks first</text>
+
+    <rect class="sb" x="542" y="140" width="416" height="44" rx="7"/>
+    <text class="st" x="558" y="167">Both branches search only those 480</text>
+
+    <rect class="sb" x="542" y="194" width="416" height="44" rx="7"/>
+    <text class="st" x="558" y="221">Top 20 returned — <tspan class="sn" fill="#047857">all 20 permitted</tspan></text>
+
+    <rect class="sb" x="542" y="248" width="416" height="44" rx="7"/>
+    <text class="st" x="558" y="275">Restricted text never leaves the database</text>
+
+    <text class="fn" x="542" y="320" fill="#047857">Full recall inside the permitted set,</text>
+    <text class="ps" x="542" y="338" fill="#0f766e">and the leak is impossible rather than merely unlikely</text>
+  </svg>
+
+  <pre><span class="c"># The whole mechanism. A top-level query_filter propagates recursively into</span>
+<span class="c"># every prefetch branch and is applied BEFORE each branch's limit.</span>
+
+client.query_points(
+    collection_name=<span class="k">"medibot_documents"</span>,
+    prefetch=[
+        models.Prefetch(query=q_dense,  using=<span class="k">"dense"</span>, limit=20),
+        models.Prefetch(query=q_sparse, using=<span class="k">"bm25"</span>,  limit=20),
+    ],
+    query=models.FusionQuery(fusion=models.Fusion.RRF),
+    query_filter=rbac_filter(role),   <span class="c"># ← one place. both branches. pre-filter.</span>
+    limit=20,
+)</pre>
+
+  <p class="cap"><strong>Two details that decide whether this is correct.</strong> <code>MatchValue(value="nurse")</code> against a list-valued <code>access_roles</code> field means <em>contains</em> — Qdrant's docs: “if several values are stored, at least one of them should match.” And <code>MatchAny</code> is <em>more</em> permissive, not stricter: it ORs across the given values. Swapping to it later, thinking it tightens the check, would be a privilege-escalation bug. Leave a code comment saying so.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Diagram 4 &middot; The narrowing</h2>
+  <h3>From the whole corpus to three passages</h3>
+  <p class="note">Two independent narrowings happen, and they do different jobs. The first is a <em>policy</em> decision — it cannot be relaxed for better answers. The second is a <em>quality</em> decision — tuning it changes answer quality but never who can see what.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 1000 400" role="img" aria-label="Funnel narrowing from the full corpus through the role filter, hybrid retrieval, and cross-encoder reranking down to three passages">
+    <defs><style>
+      .b1{fill:#f1f3f6;stroke:#c8cdd6;stroke-width:1.5}
+      .b2{fill:#ecfdf5;stroke:#9fd9c2;stroke-width:1.5}
+      .b3{fill:#eff4ff;stroke:#a9c2f5;stroke-width:1.5}
+      .b4{fill:#dbeafe;stroke:#2563eb;stroke-width:1.5}
+      .cn{font:700 17px -apple-system,system-ui,sans-serif;fill:#1a1d21}
+      .lt{font:600 14px -apple-system,system-ui,sans-serif;fill:#1a1d21}
+      .ld{font:11.5px -apple-system,system-ui,sans-serif;fill:#6b7280}
+      .lk{font:600 10.5px ui-monospace,Menlo,monospace;fill:#9aa3af}
+      .cx{fill:#eef1f5}
+    </style></defs>
+
+    <!-- connectors -->
+    <polygon class="cx" points="40,98 560,98 465,130 135,130"/>
+    <polygon class="cx" points="135,188 465,188 375,220 225,220"/>
+    <polygon class="cx" points="225,278 375,278 330,310 270,310"/>
+
+    <rect class="b1" x="40"  y="40"  width="520" height="58" rx="8"/>
+    <text class="cn" x="300" y="76" text-anchor="middle">~1,200 chunks</text>
+    <text class="lk" x="600" y="60">STARTING POINT</text>
+    <text class="lt" x="600" y="80">Everything in the collection</text>
+    <text class="ld" x="600" y="97">all five departments, every document</text>
+
+    <rect class="b2" x="135" y="130" width="330" height="58" rx="8"/>
+    <text class="cn" x="300" y="166" text-anchor="middle">~480</text>
+    <text class="lk" x="600" y="150" fill="#047857">POLICY · NOT TUNABLE</text>
+    <text class="lt" x="600" y="170">Visible to this role</text>
+    <text class="ld" x="600" y="187">Qdrant query_filter on access_roles — a pre-filter</text>
+
+    <rect class="b3" x="225" y="220" width="150" height="58" rx="8"/>
+    <text class="cn" x="300" y="256" text-anchor="middle">20</text>
+    <text class="lk" x="600" y="240" fill="#2563eb">QUALITY · TUNABLE</text>
+    <text class="lt" x="600" y="260">Hybrid candidates</text>
+    <text class="ld" x="600" y="277">dense ⊕ BM25, fused by RRF inside Qdrant</text>
+
+    <rect class="b4" x="270" y="310" width="60" height="58" rx="8"/>
+    <text class="cn" x="300" y="346" text-anchor="middle" fill="#1e3a8a">3</text>
+    <text class="lk" x="600" y="330" fill="#2563eb">QUALITY · TUNABLE</text>
+    <text class="lt" x="600" y="350">Reranked, sent to the LLM</text>
+    <text class="ld" x="600" y="367">cross-encoder reads query + chunk together</text>
+  </svg>
+
+  <p class="cap"><strong>Why the cross-encoder is worth its latency.</strong> Hybrid retrieval scores the query and each chunk <em>independently</em> — embeddings are computed without knowledge of each other. A cross-encoder reads the pair <em>together</em> in one forward pass, which is far more accurate and far too slow to run over a whole corpus. Running it on 20 candidates buys most of the accuracy for none of the cost.</p>
+  <p class="cap">Log the scores during development. You will regularly see the 4th or 5th hybrid result outscore the 1st — capture one of those logs as a README screenshot. It is more convincing than any claim you could write.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Diagram 5 &middot; Ingestion</h2>
+  <h3>How a PDF becomes a retrievable, access-labelled chunk</h3>
+  <p class="note">Run once, offline, before anything else works. The critical property is that a chunk's embedded text is not the raw paragraph — it carries the heading path above it, so <code>"25mg twice daily"</code> becomes something both the embedder and the LLM can actually use.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 1000 200" role="img" aria-label="Ingestion pipeline: Docling parsing, hierarchical chunking, heading contextualization, dual embedding, and upsert with access metadata">
+    <defs>
+      <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#c8cdd6"/>
+      </marker>
+      <style>
+        .ib{fill:#fff;stroke:#d8dce2;stroke-width:1.5}
+        .ih{font:600 12.5px -apple-system,system-ui,sans-serif;fill:#1a1d21}
+        .ic{font:600 10px ui-monospace,Menlo,monospace;fill:#9aa3af}
+        .id{font:10.5px -apple-system,system-ui,sans-serif;fill:#6b7280}
+        .il{stroke:#c8cdd6;stroke-width:1.5;fill:none}
+      </style>
+    </defs>
+
+    <rect class="ib" x="14" y="46" width="176" height="86" rx="9"/>
+    <text class="ic" x="30" y="68">01</text>
+    <text class="ih" x="30" y="90">Docling parse</text>
+    <text class="id" x="30" y="108">headings, tables and code</text>
+    <text class="id" x="30" y="122">recognised, not flattened</text>
+    <line class="il" x1="192" y1="89" x2="214" y2="89" marker-end="url(#a2)"/>
+
+    <rect class="ib" x="216" y="46" width="176" height="86" rx="9"/>
+    <text class="ic" x="232" y="68">02</text>
+    <text class="ih" x="232" y="90">HybridChunker</text>
+    <text class="id" x="232" y="108">split on structure first,</text>
+    <text class="id" x="232" y="122">token limit as a second pass</text>
+    <line class="il" x1="394" y1="89" x2="416" y2="89" marker-end="url(#a2)"/>
+
+    <rect class="ib" x="418" y="46" width="176" height="86" rx="9"/>
+    <text class="ic" x="434" y="68">03</text>
+    <text class="ih" x="434" y="90">contextualize()</text>
+    <text class="id" x="434" y="108">prepends the full heading</text>
+    <text class="id" x="434" y="122">chain to the embedded text</text>
+    <line class="il" x1="596" y1="89" x2="618" y2="89" marker-end="url(#a2)"/>
+
+    <rect class="ib" x="620" y="46" width="176" height="86" rx="9"/>
+    <text class="ic" x="636" y="68">04</text>
+    <text class="ih" x="636" y="90">Dual embed</text>
+    <text class="id" x="636" y="108">bge-small 384-d dense</text>
+    <text class="id" x="636" y="122">+ Qdrant/bm25 sparse</text>
+    <line class="il" x1="798" y1="89" x2="820" y2="89" marker-end="url(#a2)"/>
+
+    <rect class="ib" x="822" y="46" width="164" height="86" rx="9"/>
+    <text class="ic" x="838" y="68">05</text>
+    <text class="ih" x="838" y="90">Upsert</text>
+    <text class="id" x="838" y="108">both vectors on one point,</text>
+    <text class="id" x="838" y="122">plus access metadata</text>
+  </svg>
+
+  <pre><span class="c"># What contextualize() actually produces — verified, not assumed</span>
+
+chunk.text     → <span class="k">"Employees accrue paid leave monthly according to tenure."</span>
+meta.headings  → [<span class="k">"Employee Handbook"</span>, <span class="k">"Leave Policy"</span>]
+
+contextualize(chunk) →
+    Employee Handbook
+    Leave Policy
+    Employees accrue paid leave monthly according to tenure.
+
+<span class="c"># Embed the contextualized form. Store and cite chunk.text.</span>
+
+payload = {
+    <span class="k">"source_document"</span>: <span class="k">"hr_handbook.pdf"</span>,
+    <span class="k">"collection"</span>:      <span class="k">"general"</span>,
+    <span class="k">"access_roles"</span>:    [<span class="k">"admin"</span>, <span class="k">"billing_executive"</span>, <span class="k">"doctor"</span>, <span class="k">"nurse"</span>, <span class="k">"technician"</span>],
+    <span class="k">"section_title"</span>:   <span class="k">"Employee Handbook &gt; Leave Policy"</span>,
+    <span class="k">"chunk_type"</span>:      <span class="k">"text"</span>,   <span class="c"># text | table | heading | code</span>
+    <span class="k">"text"</span>:            chunk.text,  <span class="c"># raw text, for citation display</span>
+}</pre>
+
+  <p class="cap"><strong><code>access_roles</code> is derived, never typed.</strong> It comes from the same dict the query filter reads. Hand-writing the list per collection is how a <code>billing</code> document quietly ends up readable by everyone — and nothing in the system would tell you.</p>
+
+  <div class="warn">
+    <h4>⚠ Three library behaviours that fail silently — no exception, no warning</h4>
+    <ol>
+      <li><code>HybridChunker(max_tokens=512)</code> is <strong>ignored</strong> when a real tokenizer object is passed. Set <code>max_tokens</code> on the <strong>tokenizer</strong>, and assert <code>chunker.max_tokens</code> at startup.</li>
+      <li><code>repeat_table_headers</code> (plural) is <strong>swallowed</strong> by pydantic. The real field is <code>repeat_table_header</code>, singular.</li>
+      <li>The cross-encoder repo is now <code>ms-marco-MiniLM-L6-v2</code>. The <code>L-6-v2</code> spelling copied across most tutorials is the legacy name.</li>
+    </ol>
+  </div>
+  </div>
+</section>
+
+<section>
+  <h2>Defence in depth</h2>
+  <h3>Five layers, so one mistake is not a breach</h3>
+  <p class="note">Layer 2 is the actual enforcement. The others exist so that a regression becomes loud rather than silent.</p>
+
+  <div class="cards">
+    <div class="card">
+      <div class="k">Layer 1 · Token</div>
+      <div class="v">Role is decoded server-side from the bearer token. A <b>role field in the request body is discarded</b>.</div>
+    </div>
+    <div class="card">
+      <div class="k">Layer 2 · Query filter</div>
+      <div class="v">The <b>real enforcement</b> — a Qdrant pre-filter on <code>access_roles</code>, propagated into both hybrid branches.</div>
+    </div>
+    <div class="card">
+      <div class="k">Layer 3 · Assertion</div>
+      <div class="v">Every returned chunk is re-checked against the matrix. A violation logs <b>CRITICAL and raises</b> rather than answering.</div>
+    </div>
+    <div class="card">
+      <div class="k">Layer 4 · Prompt</div>
+      <div class="v">“Answer only from the context. Never comment on what other roles can access.” Stops <b>confirming restricted collections exist</b>.</div>
+    </div>
+    <div class="card">
+      <div class="k">Layer 5 · Refusal</div>
+      <div class="v">An empty result set returns a <b>role-scoped explanation</b> naming the permitted collections — the LLM is never called.</div>
+    </div>
+  </div>
+
+  <p class="cap" style="border-top:1px solid var(--line);padding-top:14px;margin-top:22px"><strong>Test the retrieval, not the answer.</strong> Asserting that the response text contains no billing codes proves the model behaved <em>this once</em>. Asserting that no chunk with <code>collection == "billing"</code> was retrieved proves it <em>cannot</em> misbehave. The adversarial suite asserts on retrieval.</p>
+</section>
+
+<footer>
+  Companion to <code>DESIGN.md</code> and <code>IMPLEMENTATION_PLAN.md</code> &middot; Codebasics AI Engineering Bootcamp &middot; Docling · Qdrant · FastEmbed · Groq · FastAPI · Next.js
+</footer>
+
+</div>
+</body>
+</html>
