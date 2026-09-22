@@ -1,6 +1,6 @@
 # Adversarial RBAC Test Results
 
-**7/7 passed** Â· generated 2026-09-22 08:44 UTC by `uv run python scripts/adversarial_test.py`
+**7/7 passed** Â· generated 2026-09-22 11:22 UTC by `uv run python scripts/adversarial_test.py`
 
 Every case asserts on the **collections actually retrieved**, not on the
 answer text. Asserting on the answer proves the model behaved this once;

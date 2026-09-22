@@ -12,6 +12,12 @@ Retrieval combines dense vector search with BM25 keyword search in a single
 fused query, a cross-encoder narrows the candidates, and a separate relational
 branch answers analytical questions that no PDF can answer.
 
+![A nurse asking for insurance billing codes and being refused, with billing, clinical and equipment shown locked in the sidebar](docs/screenshots/Nurse_Priya_screenshot.png)
+
+*A nurse asks for insurance billing codes. No sources are returned, because no
+billing chunk was ever retrieved. [The same question asked as a billing
+executive](#the-same-question-two-roles) returns the codes with citations.*
+
 ---
 
 ## Contents
@@ -551,9 +557,36 @@ The nurse's response has **no sources at all** — not sources that were filtere
 after the fact. The billing codes were never retrieved, so there was nothing for
 the model to leak.
 
-<!-- SCREENSHOT: terminal output of scripts/adversarial_test.py showing 7/7 -->
-<!-- SCREENSHOT: nurse asking for billing codes -> amber refusal in the UI -->
-<!-- SCREENSHOT: billing.ravi asking the SAME question -> real answer with billing citations -->
+#### `nurse.priya` — blocked
+
+![Nurse asking for billing codes and being refused](docs/screenshots/Nurse_Priya_screenshot.png)
+
+The sidebar shows the boundary directly: `general` and `nursing` are live,
+`clinical`, `billing` and `equipment` are struck through and locked. The
+response carries the amber **ACCESS BLOCKED** pill with a lock, `answered as
+nurse`, and **no source cards at all** — because no billing chunk was ever
+retrieved.
+
+#### `billing.ravi` — same question, answered
+
+![Billing executive asking the same question and getting cited billing codes](docs/screenshots/billing_ravi_screenshot.png)
+
+Identical question, identical deployment, different token. `billing` is now
+unlocked in the sidebar, the pill reads **HYBRID RAG**, and the answer carries
+`PROC-CARD-01` / `PROC-CARD-02` with three citation cards — all
+`billing_codes.pdf`, tagged `billing` — plus the per-chunk rerank scores
+(`0.336 · 0.215 · 0.021`).
+
+#### The adversarial suite
+
+![Adversarial RBAC suite reporting 7 of 7 passed](docs/screenshots/test_result.png)
+
+All seven cases, asserting on the **collections actually retrieved**. Case 6
+shows `body role 'admin' ignored`, and case 7 shows
+`retrieval_type=blocked` — the technician's analytical question stopped at the
+SQL gate rather than running either pipeline. The log lines above the table are
+the router explaining itself: `route=hybrid_rag` for the nurse,
+`route=sql_rag` then `SQL RAG refused for role=technician`.
 
 ---
 
@@ -676,7 +709,9 @@ Full output: [`docs/rerank_floor_calibration.md`](docs/rerank_floor_calibration.
 Two unit tests lock this in, so a future change can't silently drift the floor
 back into the answer band.
 
-<!-- SCREENSHOT: rerank_demo.py output -->
+The scores are surfaced in the UI too — visible as
+`rerank scores: 0.336 · 0.215 · 0.021` beneath the billing answer
+[above](#billingravi--same-question-answered).
 
 ---
 
