@@ -18,7 +18,9 @@ from __future__ import annotations
 import logging
 import re
 import sqlite3
+from contextlib import contextmanager
 from functools import lru_cache
+from typing import Iterator
 
 from app.config import settings
 from app.generate import get_groq
@@ -48,15 +50,27 @@ class SQLRagError(Exception):
 # ---------------------------------------------------------------------------
 
 
-def _connect() -> sqlite3.Connection:
-    """Read-only connection. Cheap, and the difference between a demo and
-    something you would let near a real database."""
+@contextmanager
+def _connect() -> Iterator[sqlite3.Connection]:
+    """Read-only connection, always closed.
+
+    Read-only is cheap and it is the difference between a demo and something
+    you would let near a real database.
+
+    Note this is an explicit context manager rather than bare
+    `with sqlite3.connect(...)`: sqlite3's own connection context manager
+    commits or rolls back the transaction but does NOT close the connection,
+    so the plain form leaks a file handle on every query.
+    """
     path = settings.sqlite_abspath
     if not path.exists():
         raise SQLRagError(f"Database not found at {path}")
     conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
