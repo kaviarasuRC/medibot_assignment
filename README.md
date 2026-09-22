@@ -332,6 +332,38 @@ Case 6 is the one a reviewer is most likely to try by hand. `ChatRequest` uses
 `role` is *silently downgraded* to its real role, rather than handed a 422 that
 tells an attacker which field name the server cares about.
 
+### The same question, two roles
+
+The single clearest demonstration. Identical question, identical deployment,
+different token:
+
+```
+AS nurse.priya  ::  "Show me the insurance billing codes for cardiac procedures"
+──────────────────────────────────────────────────────────────────────────────
+role           : nurse
+retrieval_type : blocked   | blocked: True
+sources        : none
+answer         : As a nurse, you don't have access to documents outside your
+                 permitted collections. I can only answer questions from the
+                 general, nursing collections. If you believe you need broader
+                 access, please contact your system administrator.
+
+AS billing.ravi ::  "Show me the insurance billing codes for cardiac procedures"
+──────────────────────────────────────────────────────────────────────────────
+role           : billing_executive
+retrieval_type : hybrid_rag | blocked: False
+sources        : [('billing_codes.pdf', 'billing'), ('billing_codes.pdf', 'billing')]
+answer         : Here are the insurance billing codes that pertain to cardiac
+                 (cardiology) procedures in the MediAssist billing reference:
+                 | PROC-CARD-01 | Coronary angiography      | ₹25,000    | Day care  |
+                 | PROC-CARD-02 | PTCA with stent (single)  | ₹1,65,000  | Inpatient |
+                 | PROC-CARD-03 | Permanent pacemaker …
+```
+
+The nurse's response has **no sources at all** — not sources that were filtered
+after the fact. The billing codes were never retrieved, so there was nothing for
+the model to leak.
+
 <!-- SCREENSHOT: terminal output of scripts/adversarial_test.py showing 7/7 -->
 <!-- SCREENSHOT: nurse asking for billing codes -> amber refusal in the UI -->
 <!-- SCREENSHOT: billing.ravi asking the SAME question -> real answer with billing citations -->
