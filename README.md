@@ -17,6 +17,7 @@ branch answers analytical questions that no PDF can answer.
 ## Contents
 
 - [What this is](#what-this-is)
+- [Technology stack](#technology-stack)
 - [Architecture](#architecture)
 - [Setup](#setup)
 - [Demo credentials](#demo-credentials)
@@ -29,6 +30,7 @@ branch answers analytical questions that no PDF can answer.
 - [Decisions and substitutions](#decisions-and-substitutions)
 - [Project structure](#project-structure)
 - [Running the tests](#running-the-tests)
+- [Known limitations and future work](#known-limitations-and-future-work)
 
 ---
 
@@ -47,6 +49,29 @@ Two problems are solved at once:
    contains [measured evidence](#retrieval-quality-20) of both failure modes.
 2. **Access control.** Enforced at the vector store, before candidate selection,
    so restricted text never enters the application process at all.
+
+---
+
+## Technology stack
+
+| Area | Choice | Why this one |
+|---|---|---|
+| Document parsing | **Docling** `2.129` | Recognises headings, tables and code rather than flattening them — which is what makes hierarchical chunking possible at all |
+| Chunking | **HybridChunker** (`docling-core 2.97`) | Hierarchical first, token-aware second — the two-pass strategy the assignment specifies |
+| Tokenizer | `BAAI/bge-small-en-v1.5` via `HuggingFaceTokenizer` | Token budget must be counted with the *embedder's* tokenizer, not a generic one |
+| Dense embeddings | **FastEmbed** `BAAI/bge-small-en-v1.5` (384-d) | Small, fast on CPU, and stronger on MTEB retrieval than `all-MiniLM-L6-v2` |
+| Sparse retrieval | **FastEmbed** `Qdrant/bm25` + `Modifier.IDF` | The modifier is mandatory — see [below](#why-modifieridf-is-not-optional) |
+| Vector store | **Qdrant 1.19** (Docker) | Named vectors on one point + a `query_filter` that pre-applies to both hybrid branches |
+| Fusion | **RRF**, server-side | Rank-based, so it is stable across shard counts — unlike DBSF |
+| Reranking | `cross-encoder/ms-marco-MiniLM-L6-v2` | ~22M params, the accuracy/speed sweet spot; runs on CPU |
+| LLM | **Groq** `openai/gpt-oss-120b` | Fast hosted inference. Groq retired the Llama chat line on 2026-08-16 |
+| Analytics | **SQLite**, read-only, plain Python | The rubric asks for a plain function, explicitly not a LangChain chain |
+| Auth | **JWT** (`python-jose`) + `secrets.compare_digest` | Demo-grade store, but a genuinely signed token — the role must not be spoofable |
+| Backend | **FastAPI** + Uvicorn, Python 3.12 | — |
+| Frontend | **Next.js 16** / React 19 / Tailwind 4 | App Router |
+| Environment | **uv** (manages CPython itself) | No system Python needed; `requirements.txt` exported for pip users |
+
+Everything runs on **CPU**. No GPU at any stage.
 
 ---
 
@@ -1014,6 +1039,49 @@ things worth testing.
 | `test_rerank.py` | `top_k`, sigmoid score range, ordering, that reranking genuinely reorders |
 | `test_generate.py` | Prompt assembly, citation building, the refusal path |
 | `test_router.py` | Both-cues-required routing, including the "how many mg" false positive |
+
+---
+
+## Known limitations and future work
+
+Stated plainly, because knowing where a system stops is part of having built it.
+
+### Known limitations
+
+- **The corpus is small — 256 chunks across 12 documents.** This flatters
+  retrieval: dense-only already scores 3/8 on the probe set and would do worse
+  at scale, but the cross-encoder also has little room to demonstrate value,
+  which is why reranking shows as neutral on hit@3 rather than a clear win.
+- **The relevance floor is empirical.** Cross-encoder scores are not calibrated
+  across queries, so `RERANK_MIN_SCORE` is derived from 18 labelled cases on
+  *this* corpus. Change the corpus, the embedder or the reranker and it must be
+  re-derived with `scripts/calibrate_floor.py`.
+- **The router is rule-based.** Two independent cues must both fire. Two words
+  have already had to be removed from its entity list for causing false
+  refusals; a third could be lurking. The `route()` signature is designed so an
+  LLM classifier can replace it without touching anything else.
+- **Auth is demo-grade.** Five users in a dict, passwords in the README. The
+  *token* is genuinely signed and the role genuinely re-derived server-side —
+  that part is not demo-grade — but there is no user store, rotation or refresh.
+- **`/chat` is stateless.** No multi-turn memory, so "what is the typical LOS?"
+  as a follow-up will not resolve. A deliberate scope decision, not an oversight.
+- **Single-tenant, single-node.** One Qdrant collection with a payload field,
+  one SQLite file, no concurrency story beyond what Uvicorn gives for free.
+- **No streaming.** Answers arrive whole, after a few seconds.
+
+### Future work
+
+| | Why it would matter |
+|---|---|
+| **Physically separate Qdrant collections per department** | A stronger isolation story than a payload filter — a bug could not cross a collection boundary at all. Costs a merge step for `admin` and `doctor` |
+| **LLM-based router behind the same `route()` signature** | Removes the false-refusal class entirely, at the price of a per-request LLM call |
+| **Conversational follow-ups** | Rewrite an ambiguous follow-up into a standalone question *before* RBAC, so the filter still applies to the resolved question |
+| **Retrieval evaluation as CI** | `compare_retrieval.py` already emits hit@3; gate merges on it so retrieval cannot silently regress |
+| **RAGAS / faithfulness scoring** | The suite proves the *right chunks* are retrieved; it does not measure whether the answer is faithful to them |
+| **Streaming responses** | The 2–4 s wait is the weakest part of the demo feel |
+| **Real identity provider + audit log** | Every `CRITICAL` RBAC-violation log should page someone, not just print |
+| **Document upload UI with re-ingestion** | Ingestion is an offline script today |
+| **Table-aware answer rendering** | Billing codes come back as markdown tables inside a chat bubble; they deserve a real table component |
 
 ---
 
