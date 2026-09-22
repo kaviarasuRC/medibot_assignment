@@ -51,6 +51,25 @@ def warm() -> None:
     get_reranker()
 
 
+def _pair_text(chunk: Chunk) -> str:
+    """What the cross-encoder actually reads.
+
+    The heading chain is prepended for the same reason `contextualize()` does it
+    at ingestion: a chunk body like "Reconsideration must be filed within the
+    insurer's window" is far easier to match against "the insurer refused to
+    pay" when it is prefixed by "Claim Rejection Response > Deadlines".
+
+    Measured on the probe set in `scripts/compare_retrieval.py`: scoring the
+    bare `chunk.text` made reranking a net *regression* against plain hybrid
+    (6/8 vs 7/8 hit@3), because the reranker demoted a correct conceptual match
+    whose signal lived in its heading. Feeding it the same context the embedder
+    saw fixes that.
+    """
+    if chunk.section_title:
+        return f"{chunk.section_title}\n{chunk.text}"
+    return chunk.text
+
+
 def rerank(
     question: str,
     candidates: list[Chunk],
@@ -66,7 +85,7 @@ def rerank(
     if not candidates:
         return []
 
-    pairs = [(question, c.text) for c in candidates]
+    pairs = [(question, _pair_text(c)) for c in candidates]
     scores = get_reranker().predict(pairs, batch_size=32)
 
     ranked = sorted(
